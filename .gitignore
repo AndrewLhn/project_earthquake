@@ -1,7 +1,4 @@
 __pycache__/
-*.py[codz]
-*$py.class
-*.so
 .Python
 build/
 develop-eggs/
@@ -16,11 +13,7 @@ sdist/
 var/
 wheels/
 share/python-wheels/
-*.egg-info/
 .installed.cfg
-*.egg
-*.manifest
-*.spec
 pip-log.txt
 pip-delete-this-directory.txt
 htmlcov/
@@ -31,14 +24,9 @@ htmlcov/
 .cache
 nosetests.xml
 coverage.xml
-*.cover
-*.py.cover
 .hypothesis/
 .pytest_cache/
 cover/
-*.mo
-*.pot
-*.log
 local_settings.py
 db.sqlite3
 db.sqlite3-journal

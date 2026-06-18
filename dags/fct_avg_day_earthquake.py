@@ -4,17 +4,17 @@ from airflow.operators.empty import EmptyOperator
 from airflow.providers.common.sql.operators.sql import SQLExecuteQueryOperator
 from airflow.sensors.external_task import ExternalTaskSensor
 
-# Конфигурация DAG
+
 OWNER = "Zhivitko.A"
 DAG_ID = "fct_avg_day_earthquake"
 
-# Используемые таблицы в DAG
+
 LAYER = "raw"
 SOURCE = "earthquake"
 SCHEMA = "dm"
 TARGET_TABLE = "fct_avg_day_earthquake"
 
-# DWH
+
 PG_CONNECT = "postgres_dwh"
 
 LONG_DESCRIPTION = """

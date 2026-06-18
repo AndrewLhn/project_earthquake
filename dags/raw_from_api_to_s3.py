@@ -7,15 +7,15 @@ from airflow.models import Variable
 from airflow.operators.empty import EmptyOperator
 from airflow.operators.python import PythonOperator
 
-# Конфигурация DAG
+
 OWNER = "Zhivitko.A"
 DAG_ID = "raw_from_api_to_s3"
 
-# Используемые таблицы в DAG
+
 LAYER = "raw"
 SOURCE = "earthquake"
 
-# S3
+
 ACCESS_KEY = Variable.get("access_key")
 SECRET_KEY = Variable.get("secret_key")
 
@@ -36,13 +36,11 @@ args = {
 
 def get_dates(**context) -> tuple[str, str]:
     """"""
-    # Используем execution_date вместо data_interval_start
     start_date = context["execution_date"].format("YYYY-MM-DD")
     
-    # Для end_date используем тот же день (или следующий, если нужно)
     end_date = start_date
     
-    logging.info(f"📅 Processing date: {start_date}")
+    logging.info(f" Processing date: {start_date}")
     
     return start_date, end_date
 
@@ -76,7 +74,7 @@ def get_and_transfer_api_data_to_s3(**context):
     )
 
     con.close()
-    logging.info(f"✅ Download for date success: {start_date}")
+    logging.info(f" Download for date success: {start_date}")
 
 
 with DAG(

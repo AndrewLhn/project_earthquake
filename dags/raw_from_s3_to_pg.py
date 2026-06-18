@@ -8,21 +8,17 @@ from airflow.operators.empty import EmptyOperator
 from airflow.operators.python import PythonOperator
 from airflow.sensors.external_task import ExternalTaskSensor
 
-# Конфигурация DAG
 OWNER = "Zhivitko.A"
 DAG_ID = "raw_from_s3_to_pg"
 
-# Используемые таблицы в DAG
 LAYER = "raw"
 SOURCE = "earthquake"
 SCHEMA = "ods"
 TARGET_TABLE = "fct_earthquake"
 
-# S3
 ACCESS_KEY = Variable.get("access_key")
 SECRET_KEY = Variable.get("secret_key")
 
-# PostgreSQL
 PG_HOST = 'pet_project_earthquake--postgres_dwh-1'
 PG_PORT = 5432
 PG_DATABASE = 'postgres'
@@ -46,15 +42,12 @@ args = {
 
 def get_dates(**context) -> tuple[str, str]:
     """"""
-    # Используем execution_date (это и есть дата, за которую запущен DAG)
     execution_date = context["execution_date"]
     
-    # Форматируем дату
     date_str = execution_date.format("YYYY-MM-DD")
     
-    logging.info(f"📅 Processing date from execution_date: {date_str}")
+    logging.info(f" Processing date from execution_date: {date_str}")
     
-    # Возвращаем одинаковые start и end для одного дня
     return date_str, date_str
 
 
@@ -63,7 +56,6 @@ def create_postgres_table_if_not_exists():
     import psycopg2
     
     try:
-        # Подключаемся напрямую к PostgreSQL
         conn = psycopg2.connect(
             host=PG_HOST,
             port=PG_PORT,
@@ -73,10 +65,8 @@ def create_postgres_table_if_not_exists():
         )
         cursor = conn.cursor()
         
-        # Создаем схему если не существует
         cursor.execute(f"CREATE SCHEMA IF NOT EXISTS {SCHEMA};")
         
-        # Создаем таблицу если не существует
         cursor.execute(f"""
             CREATE TABLE IF NOT EXISTS {SCHEMA}.{TARGET_TABLE} (
                 time TIMESTAMP,
@@ -107,7 +97,7 @@ def create_postgres_table_if_not_exists():
         conn.commit()
         cursor.close()
         conn.close()
-        logging.info(f"✅ Table {SCHEMA}.{TARGET_TABLE} created or already exists")
+        logging.info(f" Table {SCHEMA}.{TARGET_TABLE} created or already exists")
         
     except Exception as e:
         logging.error(f"❌ Failed to create table: {e}")
@@ -119,8 +109,7 @@ def get_and_transfer_raw_data_to_ods_pg(**context):
     logging.info(f"💻 Start load for dates: {start_date}/{end_date}")
     
     con = duckdb.connect()
-    
-    # Настройка S3 и DuckDB
+
     con.sql(f"""
         SET TIMEZONE='UTC';
         INSTALL httpfs;
@@ -132,18 +121,16 @@ def get_and_transfer_raw_data_to_ods_pg(**context):
         SET s3_use_ssl = FALSE;
     """)
     
-    # ПРОВЕРКА 1: Есть ли файл и сколько в нем строк?
     try:
         s3_count = con.sql(f"""
             SELECT COUNT(*) FROM 's3://prod/{LAYER}/{SOURCE}/{start_date}/{start_date}_00-00-00.gz.parquet'
         """).fetchone()[0]
-        logging.info(f"📊 Rows in S3 file: {s3_count}")
+        logging.info(f" Rows in S3 file: {s3_count}")
         
         if s3_count == 0:
-            logging.warning("⚠️ S3 file is empty!")
+            logging.warning(" S3 file is empty!")
             return
             
-        # Покажем структуру данных
         sample = con.sql(f"""
             SELECT * FROM 's3://prod/{LAYER}/{SOURCE}/{start_date}/{start_date}_00-00-00.gz.parquet' 
             LIMIT 3
@@ -155,7 +142,6 @@ def get_and_transfer_raw_data_to_ods_pg(**context):
         logging.error(f"❌ Error reading from S3: {e}")
         raise
     
-    # Настройка подключения к PostgreSQL через DuckDB
     con.sql(f"""
         CREATE SECRET dwh_postgres (
             TYPE postgres,
@@ -169,7 +155,6 @@ def get_and_transfer_raw_data_to_ods_pg(**context):
         ATTACH '' AS dwh_postgres_db (TYPE postgres, SECRET dwh_postgres);
     """)
     
-    # Удаление старых записей
     import psycopg2
     conn = psycopg2.connect(
         host=PG_HOST,
@@ -180,7 +165,6 @@ def get_and_transfer_raw_data_to_ods_pg(**context):
     )
     cursor = conn.cursor()
     
-    # Удаляем старые данные за этот период
     cursor.execute(f"""
         DELETE FROM {SCHEMA}.{TARGET_TABLE} 
         WHERE DATE(time) >= %s AND DATE(time) < %s
@@ -189,12 +173,10 @@ def get_and_transfer_raw_data_to_ods_pg(**context):
     logging.info(f"🧹 Deleted {deleted} existing records for {start_date}")
     conn.commit()
     
-    # ПРОВЕРКА 2: Сколько строк до INSERT?
     cursor.execute(f"SELECT COUNT(*) FROM {SCHEMA}.{TARGET_TABLE}")
     before_count = cursor.fetchone()[0]
     logging.info(f"📊 Rows in PostgreSQL BEFORE insert: {before_count}")
     
-    # Выполняем INSERT через DuckDB
     try:
         result = con.execute(f"""
             INSERT INTO dwh_postgres_db.{SCHEMA}.{TARGET_TABLE}
@@ -218,20 +200,17 @@ def get_and_transfer_raw_data_to_ods_pg(**context):
             FROM 's3://prod/{LAYER}/{SOURCE}/{start_date}/{start_date}_00-00-00.gz.parquet'
         """)
         
-        # DuckDB не возвращает количество вставленных строк напрямую
         logging.info(f"✅ INSERT executed successfully")
         
     except Exception as e:
         logging.error(f"❌ Error during INSERT: {e}")
         raise
     
-    # ПРОВЕРКА 3: Сколько строк после INSERT?
     cursor.execute(f"SELECT COUNT(*) FROM {SCHEMA}.{TARGET_TABLE}")
     after_count = cursor.fetchone()[0]
     logging.info(f"📊 Rows in PostgreSQL AFTER insert: {after_count}")
     logging.info(f"📊 Rows added this run: {after_count - before_count}")
     
-    # Проверка конкретно за этот день
     cursor.execute(f"""
         SELECT COUNT(*) FROM {SCHEMA}.{TARGET_TABLE} 
         WHERE DATE(time) >= %s AND DATE(time) < %s
@@ -239,15 +218,14 @@ def get_and_transfer_raw_data_to_ods_pg(**context):
     day_count = cursor.fetchone()[0]
     logging.info(f"📊 Rows for date {start_date}: {day_count}")
     
-    # ЯВНЫЙ КОММИТ
     conn.commit()
-    logging.info("✅ Explicit COMMIT executed")
+    logging.info(" Explicit COMMIT executed")
     
     cursor.close()
     conn.close()
     con.close()
     
-    logging.info(f"✅ Load completed for date: {start_date}")
+    logging.info(f" Load completed for date: {start_date}")
 
 
 with DAG(
@@ -271,8 +249,8 @@ with DAG(
         external_dag_id="raw_from_api_to_s3",
         allowed_states=["success"],
         mode="reschedule",
-        timeout=360000,  # длительность работы сенсора
-        poke_interval=60,  # частота проверки
+        timeout=360000,  
+        poke_interval=60, 
     )
 
     get_and_transfer_raw_data_to_ods_pg = PythonOperator(
